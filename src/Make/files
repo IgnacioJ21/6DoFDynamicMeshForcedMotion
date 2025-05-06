@@ -1,4 +1,3 @@
 forcedRigidBodyMotionSolver/forcedRigidBodyMotionSolver.C
-forcedRigidBodyMotionSolver/forcedTimeSeriesRigidBodyMotionSolver.C
 
 LIB = $(FOAM_USER_LIBBIN)/lib6DoFDynamicMeshForcedMotion
