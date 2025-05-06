@@ -66,6 +66,11 @@ class forcedRigidBodyMotionSolver
         //forcedRigidBodyMotion motion_;
         
         vector centreOfRotation;
+        vector FileDisplacement_;
+        scalar FileDisplacementDoF_;
+        // Store the time and motion data
+        List<scalar> times;
+        List<scalar> motions;
         vector centreOfRotation0_;
         tensor Q0_;
         tensor Rz0_;
@@ -94,6 +99,9 @@ class forcedRigidBodyMotionSolver
         //- Test-mode in which only the gravitational body-force is applied
         bool test_;
 
+        //- Test-mode in which only the gravitational body-force is applied
+        bool motionFromFile_;
+
         //- Reference density required by the forces object for
         //  incompressible calculations, required if rho == rhoInf
         scalar rhoInf_;
@@ -103,8 +111,11 @@ class forcedRigidBodyMotionSolver
         //  as rhoInf
         word rhoName_;
 
-	// run up factor, its the time in seconds
-	scalar tSoft_;
+        //- Name of the Dictname for motions 
+        word motionFromFileDictName_;
+
+        // run up factor, its the time in seconds
+        scalar tSoft_;
 
         //- Current interpolation scale (1 at patches, 0 at distance_)
         pointScalarField scale_;
@@ -126,7 +137,6 @@ class forcedRigidBodyMotionSolver
 
         //- No copy assignment
         void operator=(const forcedRigidBodyMotionSolver&) = delete;
-
 
 public:
 
@@ -175,6 +185,9 @@ public:
                 const scalarField& scale,
                 const Time& t
             );
+
+        // Declare function for reading the file
+        void readMotionFile(const fileName& fileName);
 
 };
 

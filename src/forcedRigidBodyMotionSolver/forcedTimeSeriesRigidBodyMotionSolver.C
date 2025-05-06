@@ -296,7 +296,7 @@ void Foam::forcedTimeSeriesRigidBodyMotionSolver::solve()
 
         functionObjects::forces f("forces", db(), forcesDict);
 
-        f.calcForcesMoment();
+        f.calcForcesMoments();
 
         /*motion_.update
         (

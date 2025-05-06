@@ -34,7 +34,8 @@ License
 #include "uniformDimensionedFields.H"
 #include "forces.H"
 #include "mathematicalConstants.H"
-
+#include <fstream>
+#include "error.H" 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
 namespace Foam
@@ -87,11 +88,13 @@ Foam::forcedRigidBodyMotionSolver::forcedRigidBodyMotionSolver
     ),*/
     centreOfRotation0_(coeffDict().get<vector>("initialCoR")),
     centreOfRotation(vector(0,0,0)),
+    FileDisplacement_(vector(0,0,0)),
     Q0_(),
     Rz0_(),
     Ry0_(),
     Rx0_(),
     patches_(coeffDict().get<wordRes>("patches")),
+    motionFromFileDictName_("ForcedMotionDict"),
     patchSet_(mesh.boundaryMesh().patchSet(patches_)),
     di_(coeffDict().get<scalar>("innerDistance")),
     do_(coeffDict().get<scalar>("outerDistance")),
@@ -103,9 +106,11 @@ Foam::forcedRigidBodyMotionSolver::forcedRigidBodyMotionSolver
     //timeList_(coeffDict().get<List<scalar>>("timeList")), // Needs testing by Ignacio
     //transRotList_(coeffDict().get<List<symmTensor>>("transRotList")), // Needs testing by Ignacio
     test_(coeffDict().getOrDefault("test", false)),
+    motionFromFile_(coeffDict().getOrDefault("motionFromFile", false)),
     rhoInf_(1.0),
     rhoName_(coeffDict().getOrDefault<word>("rho", "rho")),
-    tSoft_(coeffDict().getOrDefault<scalar>("tSoft", 0)), 
+    tSoft_(coeffDict().getOrDefault<scalar>("tSoft", 0)),  
+    FileDisplacementDoF_(coeffDict().getOrDefault<scalar>("FileDisplacementDoF", 0)),
     scale_
     (
         IOobject
@@ -201,6 +206,22 @@ Foam::forcedRigidBodyMotionSolver::forcedRigidBodyMotionSolver
         pointConstraints::New(pMesh).constrain(scale_);
         scale_.write();
     }
+
+    // Read the motion file and store it 
+    if (motionFromFile_)
+    {
+        IOdictionary dict(
+            IOobject(
+                "ForcedMotionDict",
+                mesh.time().constant(),
+                mesh,
+                IOobject::MUST_READ,
+                IOobject::NO_WRITE
+            )
+        );
+        fileName motionFileName(mesh.time().path() / "constant" / word(dict.lookup("file")));
+        readMotionFile(motionFileName);
+    }
 }
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
@@ -232,6 +253,38 @@ Foam::forcedRigidBodyMotionSolver::curPoints() const
     }
 
     return newPoints;
+}
+
+void Foam::forcedRigidBodyMotionSolver::readMotionFile(const fileName& motionFileName)
+{
+    std::ifstream motionFile(motionFileName.c_str());
+    
+    if (!motionFile.is_open()) {
+        FatalErrorInFunction
+            << "Unable to open motion file " << motionFileName
+            << Foam::endl;
+        Foam::exit(FatalError);
+    }
+    
+    std::string line;
+    
+    // Skip the first line if it's a header
+    std::getline(motionFile, line);
+
+    // Read the rest of the file and store the times and motions
+    while (std::getline(motionFile, line)) {
+        std::istringstream stream(line);
+        scalar time;
+        scalar motion;
+        
+        stream >> time >> motion;  // Read time and motion values
+        
+        times.append(time);  // Append to the 'times' list
+        motions.append(motion);  // Append to the 'motions' list    
+    }
+    // ✅ Print only once after reading all lines
+    Foam::Info << "Motion data loaded from file " << motionFileName << Foam::nl;
+    Foam::Info << "Number of data points: " << times.size() << Foam::nl;
 }
 
 
@@ -297,7 +350,7 @@ void Foam::forcedRigidBodyMotionSolver::solve()
 
         functionObjects::forces f("forces", db(), forcesDict);
 
-        f.calcForcesMoment();
+        f.calcForcesMoments();
 
         /*motion_.update
         (
@@ -390,23 +443,13 @@ Foam::tmp<Foam::pointField> Foam::forcedRigidBodyMotionSolver::transform
 ) 
 {
 
-    //scalar a = 0.1;
-    //scalar w = 3.14;
-    
-    //Added this interpolation for time series input. Needs testing by Ignacio
-    /*int i = 0;
-    while (t.value() < timeList_[i])
-    {
-        i++;
-    }  
-    
-    scalar t0 = timeList_[i-1];
-    scalar t1 = timeList_[i];
-    symmTensor tR0 = transRotList_[i-1];
-    symmTensor tR1 = transRotList_[i];    
-    symmTensor currentPosition = tR0 + ((tR1 - tR0)/(t1 - t0)) * (t.value() - t0);*/
+
     scalar PI_(Foam::constant::mathematical::pi);
     scalar factorRunUp(1.0);
+    vector FileDisplacement(0, 0, 0);
+    vector centreOfRotation(0, 0, 0);
+    scalar alpha, beta, gamma;
+
     if (tSoft_ > 0.0)
     {
         factorRunUp = (Foam::sin(2*PI_/(2.0*tSoft_)*Foam::min(tSoft_, t.value())+270*PI_/180)+1)/2;
@@ -414,12 +457,66 @@ Foam::tmp<Foam::pointField> Foam::forcedRigidBodyMotionSolver::transform
 //	factorRunUp = (sin(2*pi/(2.0*tSoft)*min(tSoft,t)+270*pi/180)+1)/2;
     }
 
-    vector centreOfRotation = centreOfRotation0_ + vector(factorRunUp*a_[0]*Foam::sin(w_[0]*t.value()),factorRunUp*a_[1]*Foam::sin(w_[1]*t.value()),factorRunUp*a_[2]*Foam::sin(w_[2]*t.value())); //centreOfRotation0 + vector(0.001,0,0);
-    //scalar beta0 = 0;
-    scalar alpha = alpha0_[0] + factorRunUp*aR_[0]*Foam::sin(wR_[0]*t.value());
-    scalar beta = alpha0_[1] + factorRunUp*aR_[1]*Foam::sin(wR_[1]*t.value());
-    scalar gamma = alpha0_[2] + factorRunUp*aR_[2]*Foam::sin(wR_[2]*t.value());
-    
+    if (motionFromFile_)
+    {
+        
+        scalar currentTime = db().time().value();  // or this->db().time().value()
+
+        // Initialize the motion value
+        scalar currentMotion = 0.0;
+
+        // Find the two nearest times surrounding the current time
+        label i = 0;
+        while (i < times.size() && times[i] < currentTime)
+        {
+            ++i;
+        }
+
+        // If currentTime is beyond the last time point
+        if (i == times.size())
+        {
+            currentMotion = motions[times.size() - 1];  // Use the last motion value
+        }
+        else if (i == 0)
+        {
+            currentMotion = motions[0];  // Use the first motion value if currentTime is before the first time
+        }
+        else
+        {
+            // Interpolation between times[i-1] and times[i]
+            scalar t1 = times[i - 1];
+            scalar t2 = times[i];
+            scalar m1 = motions[i - 1];
+            scalar m2 = motions[i];
+
+            // Linear interpolation formula
+            currentMotion = m1 + (m2 - m1) * (currentTime - t1) / (t2 - t1);
+        }
+
+        Foam::Info << "At time = " << currentTime 
+           << ", currentMotion = " << currentMotion << Foam::endl;
+
+        // Assign to desired DoF
+        scalar DoF = FileDisplacementDoF_ - 1;
+        Foam::Info << "Current FileDisplacementDOF: " << DoF << Foam::endl;
+        FileDisplacement[DoF] = currentMotion;
+        Foam::Info << "Current FileDisplacement: " << FileDisplacement << Foam::endl;
+        centreOfRotation = centreOfRotation0_ + vector(factorRunUp*a_[0]*Foam::sin(w_[0]*t.value()),factorRunUp*a_[1]*Foam::sin(w_[1]*t.value()),factorRunUp*a_[2]*Foam::sin(w_[2]*t.value())) + FileDisplacement; //centreOfRotation0 + vector(0.001,0,0);
+        Foam::Info << "Current centreOfRotation: " << centreOfRotation << Foam::endl;
+        //scalar beta0 = 0;
+        alpha = alpha0_[0] + factorRunUp*aR_[0]*Foam::sin(wR_[0]*t.value());
+        beta = alpha0_[1] + factorRunUp*aR_[1]*Foam::sin(wR_[1]*t.value());
+        gamma = alpha0_[2] + factorRunUp*aR_[2]*Foam::sin(wR_[2]*t.value());   
+    }
+    else
+    {
+        centreOfRotation = centreOfRotation0_ + vector(factorRunUp*a_[0]*Foam::sin(w_[0]*t.value()),factorRunUp*a_[1]*Foam::sin(w_[1]*t.value()),factorRunUp*a_[2]*Foam::sin(w_[2]*t.value())); 
+        //scalar beta0 = 0;
+        alpha = alpha0_[0] + factorRunUp*aR_[0]*Foam::sin(wR_[0]*t.value());
+        beta = alpha0_[1] + factorRunUp*aR_[1]*Foam::sin(wR_[1]*t.value());
+        gamma = alpha0_[2] + factorRunUp*aR_[2]*Foam::sin(wR_[2]*t.value());
+    }
+        
     tensor Rz;
     tensor Ry;
     tensor Rx;

@@ -1,0 +1,14 @@
+#!/bin/sh
+cd ${0%/*} || exit 1    # run from this directory
+
+wcmd="${1:-wmake}"
+
+if [ "$wcmd" = "wmake" ] || [ "$wcmd" = "wclean" ]; then
+
+    $wcmd src/forcedRigidBodyMotionSolver
+
+else
+    # Invalid input
+    echo "Error: Input must be either 'wmake' or 'wclean'"
+    exit 1
+fi
