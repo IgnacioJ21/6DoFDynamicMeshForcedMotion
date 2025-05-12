@@ -32,7 +32,7 @@ forcedRigidBodyMotionCoeffs
         FileDisplacementDoF      3;
 	    translationalAmplitude		(0 0 0);
 	    translationalFrequency		(0 0 0);
-	    rotationalAmplitude		(0 0.2 0);
+	    rotationalAmplitude		(0 1 0);
 	    rotationalFrequency		(0 1 0);
 }
 

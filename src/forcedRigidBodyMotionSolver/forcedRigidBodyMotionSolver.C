@@ -208,18 +208,20 @@ Foam::forcedRigidBodyMotionSolver::forcedRigidBodyMotionSolver
     }
 
     // Read the motion file and store it 
+    const Time& runTime = mesh.time();
+
     if (motionFromFile_)
     {
         IOdictionary dict(
             IOobject(
                 "ForcedMotionDict",
-                mesh.time().constant(),
+                runTime.constant(),
                 mesh,
                 IOobject::MUST_READ,
                 IOobject::NO_WRITE
             )
         );
-        fileName motionFileName(mesh.time().path() / "constant" / word(dict.lookup("file")));
+        fileName motionFileName(runTime.constant()/ word(dict.lookup("file")));
         readMotionFile(motionFileName);
     }
 }
@@ -282,7 +284,7 @@ void Foam::forcedRigidBodyMotionSolver::readMotionFile(const fileName& motionFil
         times.append(time);  // Append to the 'times' list
         motions.append(motion);  // Append to the 'motions' list    
     }
-    // ✅ Print only once after reading all lines
+    //  Print only once after reading all lines
     Foam::Info << "Motion data loaded from file " << motionFileName << Foam::nl;
     Foam::Info << "Number of data points: " << times.size() << Foam::nl;
 }
